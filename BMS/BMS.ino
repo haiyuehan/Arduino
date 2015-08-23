@@ -28,12 +28,16 @@
 #define V2_PIN A9
 #define V3_PIN A10
 #define V4_PIN A11
-#define THERMISTOR_V12 A12
-#define THERMISTOR_V23 A13
-#define THERMISTOR_V34 A14
+#define THERMISTOR_V12_PIN A12
+#define THERMISTOR_V23_PIN A13
+#define THERMISTOR_V34_PIN A14
 #define BATTERY_CURRENT_PIN A15
 
 #define ONBOARD_LED 13
+
+//Analog input definitions
+#define FILTER_ORDER 4
+#define VOLTAGE_REFERENCE 614 //614=round(3.000/5*1023)
 
 //Inputs
 float ModuleTemp[3];
@@ -41,33 +45,58 @@ float ModuleVoltage[4];
 float ArrayCurrent = 0;
 float PackCurrent = 0;
 
-//Filter order
-#define FILTER_ORDER 4
-
 //Input data
 int ModuleTempRaw[3];
-int ModuleVoltageRaw[3];
+int ModuleVoltageRaw[4];
 int SolarCurrentRaw = 0;
+int BatteryCurrentRaw = 0;
+int ReferenceVoltageRaw = 0;
 
 //Input filter arrays
 int ModuleTempArray[3][FILTER_ORDER];
 int ModuleVoltageArray[4][FILTER_ORDER];
 int SolarCurrentArray[FILTER_ORDER];
+int BatteryCurrentArray[FILTER_ORDER];
+int ReferenceVoltageArray[FILTER_ORDER];
 
 //Filtered input data
 int ModuleTempFiltered[3];
 int ModuleVoltageFiltered[4];
+int BatteryCurrentFiltered = 0;
 int SolarCurrentFiltered = 0;
+int ReferenceVoltageFiltered = 0;
 
 //===================FUNCTIONS: Read raw data======================
-void updateTemp(){
+void readADCs(){
+  ModuleTempRaw[0] = analogRead(THERMISTOR_V12_PIN);
+  ModuleTempRaw[1] = analogRead(THERMISTOR_V23_PIN);
+  ModuleTempRaw[3] = analogRead(THERMISTOR_V34_PIN);
   
+  ModuleVoltageRaw[0] = analogRead(V1_PIN);
+  ModuleVoltageRaw[1] = analogRead(V2_PIN);
+  ModuleVoltageRaw[2] = analogRead(V3_PIN);
+  ModuleVoltageRaw[4] = analogRead(V4_PIN);
+  
+  SolarCurrentRaw = analogRead(ARRAY_CURRENT_PIN);
+  BatteryCurrentRaw = analogRead(BATTERY_CURRENT_PIN);
+  
+  ReferenceVoltageRaw = analogRead(VOLTAGE_REFERENCE_PIN);
 }
 
-void updateVolts(){
-}
-
-void updateCurrent(){
+void CalculateAnalogValues(){
+  //Declarations
+  float AnalogScalingFactor = 0;
+  
+  //Calculates the scaling factor - multiply ADC value by this number to get voltage reference corrected voltage
+  AnalogScalingFactor = (5/1024)*(VOLTAGE_REFERENCE/ReferenceVoltageFiltered);
+  
+  //Calculates the module voltages
+  
+  //Calculates the module temperatures
+  
+  //Calculates the battery current
+  
+  //Calculates the array current
 }
 
 bool getMainContactorDryContactState(){
@@ -84,6 +113,8 @@ void runInputFilters(){
   long ModuleTempSum[3];
   long ModuleVoltageSum[4];
   long SolarCurrentSum = 0;
+  long BatteryCurrentSum = 0;
+  long ReferenceVoltageSum = 0;
   
   //Shift all values by 1
   for (x = 0; x < (FILTER_ORDER-1); x++){
@@ -97,6 +128,9 @@ void runInputFilters(){
     ModuleVoltageArray[3][x+1] = ModuleVoltageArray[3][x];
 
     SolarCurrentArray[x+1] = SolarCurrentArray[x];
+    BatteryCurrentArray[x+1] = BatteryCurrentArray[x];
+    
+    ReferenceVoltageArray[x+1] = ReferenceVoltageArray[x];
   }
 
   //Replace the beginning of the array with the current value
@@ -110,6 +144,9 @@ void runInputFilters(){
   ModuleVoltageArray[3][0] = ModuleVoltageRaw[3];
  
   SolarCurrentArray[0] = SolarCurrentRaw;
+  BatteryCurrentArray[0] = BatteryCurrentRaw;
+  
+  ReferenceVoltageArray[0] = ReferenceVoltageRaw;
 
   //Performs addition
   for (x = 0; x < (FILTER_ORDER); x++){
@@ -123,6 +160,9 @@ void runInputFilters(){
     ModuleVoltageSum[3] = ModuleVoltageSum[3] + ModuleVoltageArray[3][x];
 
     SolarCurrentSum = SolarCurrentSum + SolarCurrentArray[x];
+    BatteryCurrentSum = BatteryCurrentSum + BatteryCurrentArray[x];
+    
+    ReferenceVoltageSum = ReferenceVoltageSum + ReferenceVoltageArray[x];
   }
 
   //Performs averaging
@@ -136,6 +176,9 @@ void runInputFilters(){
   ModuleVoltageFiltered[3] = (int)(ModuleVoltageSum[3] / FILTER_ORDER);
 
   SolarCurrentFiltered = (int)(SolarCurrentSum / FILTER_ORDER);
+  BatteryCurrentFiltered = (int)(BatteryCurrentSum / FILTER_ORDER);
+  
+  ReferenceVoltageFiltered = (int)(ReferenceVoltageSum / FILTER_ORDER);
 }
 //===================FUNCTIONS: BMS checks======================
 
