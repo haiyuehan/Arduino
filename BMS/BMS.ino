@@ -5,6 +5,12 @@
 
 //===================Global definitions=====================
 
+//Module voltage scalers
+#define V1_SCALE 1
+#define V2_SCALE 1.620        // = 1/(100k/(100k+62k))
+#define V2_SCALE 2.4          // = 1/(100k/(100k+140k))
+#define V3_SCALE 3.2          // = 1/(100k/(100k+220k))
+
 //Pin definitions
 #define LED_R_PIN 7
 #define LED_O_PIN 6
@@ -126,11 +132,11 @@ void CalculateAnalogValues(){
   //Calculates the scaling factor - multiply ADC value by this number to get voltage reference corrected voltage
   AnalogScalingFactor = (float)((float)5/1024)*((float)VOLTAGE_REFERENCE/ReferenceVoltageFiltered);
   
-  //Calculates the module voltages [FORGOT VOLTAGE DIVIDER COMPENSATION!!!!]
-  ModuleVoltage[0] = (float)ModuleVoltageFiltered[0] * AnalogScalingFactor;
-  ModuleVoltage[1] = (float)ModuleVoltageFiltered[1] * AnalogScalingFactor;
-  ModuleVoltage[2] = (float)ModuleVoltageFiltered[2] * AnalogScalingFactor;
-  ModuleVoltage[3] = (float)ModuleVoltageFiltered[3] * AnalogScalingFactor;
+  //Calculates the module voltages 
+  ModuleVoltage[0] = (float)ModuleVoltageFiltered[0] * AnalogScalingFactor * V1_SCALE;
+  ModuleVoltage[1] = (float)ModuleVoltageFiltered[1] * AnalogScalingFactor * V2_SCALE;
+  ModuleVoltage[2] = (float)ModuleVoltageFiltered[2] * AnalogScalingFactor * V3_SCALE;
+  ModuleVoltage[3] = (float)ModuleVoltageFiltered[3] * AnalogScalingFactor * V4_SCALE;
   
   //Calculates the module temperatures
   
