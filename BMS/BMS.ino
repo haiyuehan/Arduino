@@ -7,9 +7,9 @@
 
 //Module voltage scalers
 #define V1_SCALE 1
-#define V2_SCALE 1.620        // = 1/(100k/(100k+62k))
-#define V2_SCALE 2.4          // = 1/(100k/(100k+140k))
-#define V3_SCALE 3.2          // = 1/(100k/(100k+220k))
+#define V2_SCALE 1.62         // = 1/(100k/(100k+62k))  and then precision calibrated with DMM and voltrage source
+#define V3_SCALE 2.422925086  // = 1/(100k/(100k+140k)) and then precision calibrated with DMM and voltrage source
+#define V4_SCALE 3.159857568  // = 1/(100k/(100k+220k)) and then precision calibrated with DMM and voltrage source
 
 //Pin definitions
 #define LED_R_PIN 7
@@ -88,6 +88,10 @@ int ReferenceVoltageFiltered = 0;
 //Initial boot
 bool isBootComplete = 0;
 
+//Quiescient current sensor calibrations
+float battCurrentQuiescient = 2.5;
+float solarCurrentQuiescient = 0.5;
+
 //LCD
 Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();
 
@@ -140,26 +144,13 @@ void CalculateAnalogValues(){
   
   //Calculates the module temperatures
   
+  
   //Calculates the battery current
-
+  PackCurrent = (float)80*((float)BatteryCurrentFiltered * AnalogScalingFactor - battCurrentQuiescient);
+  
   //Calculates the array current
-
-
-  /*
-   
-float ModuleTemp[3];
-float ModuleVoltage[4];
-float ArrayCurrent = 0;
-float PackCurrent = 0;
-
-
-int ModuleTempFiltered[3];
-int ModuleVoltageFiltered[4];
-int BatteryCurrentFiltered = 0;
-int SolarCurrentFiltered = 0;
-int ReferenceVoltageFiltered = 0;
-
-*/
+  ArrayCurrent = ((float)20/4.05)*((float)SolarCurrentFiltered * AnalogScalingFactor - solarCurrentQuiescient);
+ 
 }
 
 bool getMainContactorDryContactState(){
@@ -360,16 +351,25 @@ ISR(TIMER1_COMPA_vect){
 
   //DEBUG
   Serial.print("V1: ");
-  Serial.print(ModuleVoltage[0]);
+  Serial.print(ModuleVoltage[0], 4);
   
-  Serial.print("  V2: ");
-  Serial.print(ModuleVoltage[1]);
+  Serial.print(" V2: ");
+  Serial.print(ModuleVoltage[1], 4);
   
-  Serial.print("  V3: ");
-  Serial.print(ModuleVoltage[2]);
+  Serial.print(" V3: ");
+  Serial.print(ModuleVoltage[2], 4);
   
-  Serial.print("  V4: ");
-  Serial.println(ModuleVoltage[3]);
+  Serial.print(" V4: ");
+  Serial.print(ModuleVoltage[3], 4);
+
+  Serial.print(" B: ");
+  Serial.print(PackCurrent, 4);
+
+  Serial.print(" BR: ");
+  Serial.print(BatteryCurrentRaw);
+
+  Serial.print(" S: ");
+  Serial.println(ArrayCurrent, 4);
 }
 
 //================Functions: Setup==================
