@@ -2,6 +2,7 @@
 #include <Wire.h>
 #include <utility/Adafruit_MCP23017.h>
 #include <Adafruit_RGBLCDShield.h>
+#include <math.h>
 
 //===================Global definitions=====================
 
@@ -10,6 +11,23 @@
 #define V2_SCALE 1.62         // = 1/(100k/(100k+62k))  and then precision calibrated with DMM and voltrage source
 #define V3_SCALE 2.422925086  // = 1/(100k/(100k+140k)) and then precision calibrated with DMM and voltrage source
 #define V4_SCALE 3.159857568  // = 1/(100k/(100k+220k)) and then precision calibrated with DMM and voltrage source
+
+//Thermistor constants
+#define B 3950
+#define Ro 10000
+#define Rknown 10000
+#define To 25
+#define Rmin 3000  //Max temp is actually 65C, which is 2072 ohms. We're using 3000 ohms, which is around 55C
+#define Rmax 25580 //Min temp is actually -20C, which is 98880 ohms. We're using 25580 ohms, which is around 5C
+
+//Cell voltage limits
+#define Vmin 3      //Actual limit is 2.8V
+#define Vmax 3.5    //Actual limit is 3.6V
+#define VChargeComplete 13.8  //3.45V per cell
+#define VCanChargeAgain 13.2  //3.3V per cell
+
+//Cell current limits
+#define MaxCurrent 110  //Actual continuous limit is 120A, with pulse limit of 400A
 
 //Pin definitions
 #define LED_R_PIN 7
@@ -60,9 +78,14 @@
 
 //Inputs
 float ModuleTemp[3] = {0,0,0};
+float ModuleTempR[3] = {0,0,0};
 float ModuleVoltage[4] = {0,0,0,0};
 float ArrayCurrent = 0;
 float PackCurrent = 0;
+float PackVoltage = 0;
+
+//Charging
+bool ChargeComplete = false;
 
 //Input data
 int ModuleTempRaw[3] = {0,0,0};
@@ -132,18 +155,26 @@ void initializeAnalogFilters(){
 void CalculateAnalogValues(){
   //Declarations
   float AnalogScalingFactor = 0;
+  float Rthermistor = 0;
+  float temp = 0;
   
   //Calculates the scaling factor - multiply ADC value by this number to get voltage reference corrected voltage
   AnalogScalingFactor = (float)((float)5/1024)*((float)VOLTAGE_REFERENCE/ReferenceVoltageFiltered);
   
   //Calculates the module voltages 
   ModuleVoltage[0] = (float)ModuleVoltageFiltered[0] * AnalogScalingFactor * V1_SCALE;
-  ModuleVoltage[1] = (float)ModuleVoltageFiltered[1] * AnalogScalingFactor * V2_SCALE;
-  ModuleVoltage[2] = (float)ModuleVoltageFiltered[2] * AnalogScalingFactor * V3_SCALE;
-  ModuleVoltage[3] = (float)ModuleVoltageFiltered[3] * AnalogScalingFactor * V4_SCALE;
+  ModuleVoltage[1] = (float)ModuleVoltageFiltered[1] * AnalogScalingFactor * V2_SCALE - ModuleVoltage[0];
+  ModuleVoltage[2] = (float)ModuleVoltageFiltered[2] * AnalogScalingFactor * V3_SCALE - (float)ModuleVoltageFiltered[1] * AnalogScalingFactor * V2_SCALE;
+  ModuleVoltage[3] = (float)ModuleVoltageFiltered[3] * AnalogScalingFactor * V4_SCALE - (float)ModuleVoltageFiltered[2] * AnalogScalingFactor * V3_SCALE;
+
+  //Pack voltage
+  PackVoltage = (float)ModuleVoltageFiltered[3] * AnalogScalingFactor * V4_SCALE;
   
   //Calculates the module temperatures
-  
+  ModuleTempR[0] = (((float)ModuleTempFiltered[0]*AnalogScalingFactor)*10000)/(5-(float)ModuleTempFiltered[0]*AnalogScalingFactor);
+  ModuleTempR[1] = (((float)ModuleTempFiltered[1]*AnalogScalingFactor)*10000)/(5-(float)ModuleTempFiltered[1]*AnalogScalingFactor);
+  ModuleTempR[2] = (((float)ModuleTempFiltered[2]*AnalogScalingFactor)*10000)/(5-(float)ModuleTempFiltered[2]*AnalogScalingFactor);
+  //temp = B/log(Rthermistor/(Ro*exp(-1*B/To)));
   
   //Calculates the battery current
   PackCurrent = (float)80*((float)BatteryCurrentFiltered * AnalogScalingFactor - battCurrentQuiescient);
@@ -237,13 +268,32 @@ void runADCFilters(){
 //===================FUNCTIONS: BMS checks======================
 
 bool isVoltBad(){
+  bool badVoltage = false;
+  for (int x = 0; x < 4; x++){
+    if ((ModuleVoltage[x] > Vmax) || (ModuleVoltage[x] < Vmin)){
+      badVoltage = true;
+    }
+  }
+  return badVoltage;
 }
 
 bool isCurrentBad(){
-  
+  if ((PackCurrent > MaxCurrent) || (PackCurrent < -1*MaxCurrent)){
+    return true;
+  }
+  else{
+    return false;
+  }
 }
 
 bool isTempBad(){
+  bool badTemp = false;
+  for (int x = 0; x < 3; x++){
+    if ((ModuleTempR[x] > Rmax) || (ModuleTempR[x] < Rmin)){
+      badTemp = true;
+    }
+  }
+  return badTemp; 
 }
 
 bool isContactorFused(){
@@ -253,6 +303,21 @@ bool ChargeBalanceNeeded(){
 }
 
 bool isChargeComplete(){
+  if (PackVoltage > VChargeComplete){
+    return true;
+  }
+  else {
+    return false;
+  }
+}
+
+bool canChargeAgain(){
+  if (PackVoltage < VCanChargeAgain){
+    return true;
+  }
+  else {
+    return false;
+  }
 }
 
 bool isPackBricked(){
@@ -276,9 +341,11 @@ float updateSocCurrent(float currentSOC){
 //===================FUNCTIONS: Contactor =======================
 
 void MainContactor(bool Close){
+  digitalWrite(BATTERY_CONTACTOR_PIN, Close);
 }
 
 void ArrayContactor(bool Close){
+  digitalWrite(ARRAY_CONTACTOR_PIN, Close);
 }
 
 bool isMainContactorClosed(){
@@ -349,32 +416,46 @@ ISR(TIMER1_COMPA_vect){
   //Caculate analog values
   CalculateAnalogValues();
 
-  //DEBUG
-  Serial.print("V1: ");
-  Serial.print(ModuleVoltage[0], 4);
-  
-  Serial.print(" V2: ");
-  Serial.print(ModuleVoltage[1], 4);
-  
-  Serial.print(" V3: ");
-  Serial.print(ModuleVoltage[2], 4);
-  
-  Serial.print(" V4: ");
-  Serial.print(ModuleVoltage[3], 4);
+  //Checks for bad voltage
+  if (isVoltBad()){
+    MainContactor(false);
+  }
 
-  Serial.print(" B: ");
-  Serial.print(PackCurrent, 4);
+  //Checks for bad current
+  if (isCurrentBad()){
+    MainContactor(false);
+  }
 
-  Serial.print(" BR: ");
-  Serial.print(BatteryCurrentRaw);
+  //Checks for bad temperature
+  if (isTempBad()){
+    MainContactor(false);
+  }
 
-  Serial.print(" S: ");
-  Serial.println(ArrayCurrent, 4);
+  //Checks for charge complete
+  if (ChargeComplete == false){
+    if (isChargeComplete()){
+      ChargeComplete = true;
+      ArrayContactor(false);
+    }
+  }
+  else{
+    if (canChargeAgain){
+      ChargeComplete = false;
+      ArrayContactor(true);
+    }
+  }
+
+  
 }
 
 //================Functions: Setup==================
 void initIO(){
-  pinMode(13, OUTPUT);
+  //LED
+  pinMode(ONBOARD_LED, OUTPUT);
+
+  //Contactors
+  pinMode(BATTERY_CONTACTOR_PIN, OUTPUT);
+  pinMode(ARRAY_CONTACTOR_PIN, OUTPUT);
 }
 
 //This function runs at startup
@@ -384,6 +465,10 @@ void setup() {
   
   //Initializes the LCD
   InitLCD();
+
+  //Closes all contactors
+  MainContactor(true);
+  ArrayContactor(true);
 
   //Initializes the ADC filters
   initializeAnalogFilters();
