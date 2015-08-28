@@ -21,8 +21,8 @@
 #define Rmax 25580 //Min temp is actually -20C, which is 98880 ohms. We're using 25580 ohms, which is around 5C
 
 //Cell voltage limits
-#define Vmin 3      //Actual limit is 2.8V
-#define Vmax 3.5    //Actual limit is 3.6V
+#define Vmin 2.8      //Actual limit is 2.8V
+#define Vmax 3.6    //Actual limit is 3.6V
 #define VChargeComplete 13.8  //3.45V per cell
 #define VCanChargeAgain 13.2  //3.3V per cell
 
@@ -71,7 +71,7 @@
 #define WHITE 0x7
 
 //Analog input definitions
-#define FILTER_ORDER 4
+#define FILTER_ORDER 20
 #define VOLTAGE_REFERENCE 512 //512=round(3.000/5*1023)
 
 //===================Global declarations=====================
@@ -110,6 +110,7 @@ int ReferenceVoltageFiltered = 0;
 
 //Initial boot
 bool isBootComplete = 0;
+int numberOfIterations = 0;
 
 //Quiescient current sensor calibrations
 float battCurrentQuiescient = 2.5;
@@ -163,7 +164,7 @@ void CalculateAnalogValues(){
   
   //Calculates the module voltages 
   ModuleVoltage[0] = (float)ModuleVoltageFiltered[0] * AnalogScalingFactor * V1_SCALE;
-  ModuleVoltage[1] = (float)ModuleVoltageFiltered[1] * AnalogScalingFactor * V2_SCALE - ModuleVoltage[0];
+  ModuleVoltage[1] = (float)ModuleVoltageFiltered[1] * AnalogScalingFactor * V2_SCALE - (float)ModuleVoltageFiltered[0] * AnalogScalingFactor * V1_SCALE;
   ModuleVoltage[2] = (float)ModuleVoltageFiltered[2] * AnalogScalingFactor * V3_SCALE - (float)ModuleVoltageFiltered[1] * AnalogScalingFactor * V2_SCALE;
   ModuleVoltage[3] = (float)ModuleVoltageFiltered[3] * AnalogScalingFactor * V4_SCALE - (float)ModuleVoltageFiltered[2] * AnalogScalingFactor * V3_SCALE;
 
@@ -271,6 +272,8 @@ bool isVoltBad(){
   bool badVoltage = false;
   for (int x = 0; x < 4; x++){
     if ((ModuleVoltage[x] > Vmax) || (ModuleVoltage[x] < Vmin)){
+      Serial.println(x);
+      Serial.println(ModuleVoltage[x]);
       badVoltage = true;
     }
   }
@@ -416,36 +419,75 @@ ISR(TIMER1_COMPA_vect){
   //Caculate analog values
   CalculateAnalogValues();
 
-  //Checks for bad voltage
-  if (isVoltBad()){
-    MainContactor(false);
-  }
-
-  //Checks for bad current
-  if (isCurrentBad()){
-    MainContactor(false);
-  }
-
-  //Checks for bad temperature
-  if (isTempBad()){
-    MainContactor(false);
-  }
-
-  //Checks for charge complete
-  if (ChargeComplete == false){
-    if (isChargeComplete()){
-      ChargeComplete = true;
-      ArrayContactor(false);
+  //Checks for initial startup
+  if (numberOfIterations > (FILTER_ORDER*2)){
+    //Checks for bad voltage
+    if (isVoltBad() == true){
+      Serial.println("Bad Voltage!!!!");
+      MainContactor(false);
+    }
+  
+    //Checks for bad current
+    if (isCurrentBad() == true){
+      Serial.println("Bad Current!!!!");
+      MainContactor(false);
+    }
+  
+    //Checks for bad temperature
+    if (isTempBad() == true){
+      Serial.println("Bad Temperature!!!!");
+      MainContactor(false);
+    }
+  
+    //Checks for charge complete
+    if (ChargeComplete == false){
+      if (isChargeComplete()){
+        ChargeComplete = true;
+        ArrayContactor(false);
+      }
+    }
+    else{
+      if (canChargeAgain){
+        ChargeComplete = false;
+        ArrayContactor(true);
+      }
     }
   }
   else{
-    if (canChargeAgain){
-      ChargeComplete = false;
-      ArrayContactor(true);
-    }
+    //Iterate iternations
+    numberOfIterations++;
   }
 
+  //DEBUG
+  Serial.print("V1: ");
+  Serial.print(ModuleVoltage[0]);
   
+  Serial.print(" V2: ");
+  Serial.print(ModuleVoltage[1]);
+  
+  Serial.print(" V3: ");
+  Serial.print(ModuleVoltage[2]);
+  
+  Serial.print(" V4: ");
+  Serial.print(ModuleVoltage[3]);
+
+  Serial.print(" T1: ");
+  Serial.print(ModuleTempR[0]);
+  
+  Serial.print(" T2: ");
+  Serial.print(ModuleTempR[1]);
+  
+  Serial.print(" T3: ");
+  Serial.print(ModuleTempR[2]);
+  
+  Serial.print(" B: ");
+  Serial.print(PackCurrent);
+
+  Serial.print(" BR: ");
+  Serial.print(PackCurrent);
+
+  Serial.print(" S: ");
+  Serial.println(ArrayCurrent);
 }
 
 //================Functions: Setup==================
