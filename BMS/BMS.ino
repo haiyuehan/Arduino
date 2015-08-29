@@ -72,7 +72,7 @@
 
 //Analog input definitions
 #define FILTER_ORDER 20
-#define VOLTAGE_REFERENCE 512 //512=round(3.000/5*1023)
+#define VOLTAGE_REFERENCE 512 //512=round(3.000/5*1023) wtf????
 
 //===================Global declarations=====================
 
@@ -83,6 +83,7 @@ float ModuleVoltage[4] = {0,0,0,0};
 float ArrayCurrent = 0;
 float PackCurrent = 0;
 float PackVoltage = 0;
+float AmbientTemp = 0;
 
 //Charging
 bool ChargeComplete = false;
@@ -93,6 +94,7 @@ int ModuleVoltageRaw[4] = {0,0,0,0};
 int SolarCurrentRaw = 0;
 int BatteryCurrentRaw = 0;
 int ReferenceVoltageRaw = 0;
+int AmbientTempRaw = 0;
 
 //Input filter arrays
 int ModuleTempArray[3][FILTER_ORDER];
@@ -100,6 +102,7 @@ int ModuleVoltageArray[4][FILTER_ORDER];
 int SolarCurrentArray[FILTER_ORDER];
 int BatteryCurrentArray[FILTER_ORDER];
 int ReferenceVoltageArray[FILTER_ORDER];
+int AmbientTempArray[FILTER_ORDER];
 
 //Filtered input data
 int ModuleTempFiltered[3] = {0,0,0};
@@ -107,6 +110,7 @@ int ModuleVoltageFiltered[4] = {0,0,0,0};
 int BatteryCurrentFiltered = 0;
 int SolarCurrentFiltered = 0;
 int ReferenceVoltageFiltered = 0;
+int AmbientTempFiltered = 0;
 
 //Initial boot
 bool isBootComplete = 0;
@@ -133,7 +137,8 @@ void readADCs(){
   SolarCurrentRaw = analogRead(ARRAY_CURRENT_PIN);
   BatteryCurrentRaw = analogRead(BATTERY_CURRENT_PIN);
   
-  ReferenceVoltageRaw = analogRead(VOLTAGE_REFERENCE_PIN);
+  ReferenceVoltageRaw = analogRead(VOLTAGE_REFERENCE_PIN); // Should correlate to 2.5 volts and should use TMP to account for temperature
+  AmbientTempRaw = analogRead(AMBIENT_TEMPERATURE_PIN); 
 }
 
 void initializeAnalogFilters(){
@@ -150,6 +155,7 @@ void initializeAnalogFilters(){
     SolarCurrentArray[x] = SolarCurrentRaw;
     BatteryCurrentArray[x] = BatteryCurrentRaw;
     ReferenceVoltageArray[x] = ReferenceVoltageRaw;
+    AmbientTempArray[x] = AmbientTempRaw;
   }
 }
 
@@ -181,7 +187,7 @@ void CalculateAnalogValues(){
   PackCurrent = (float)80*((float)BatteryCurrentFiltered * AnalogScalingFactor - battCurrentQuiescient);
   
   //Calculates the array current
-  ArrayCurrent = ((float)20/4.05)*((float)SolarCurrentFiltered * AnalogScalingFactor - solarCurrentQuiescient);
+  ArrayCurrent = ((float)20/4.5)*((float)SolarCurrentFiltered * AnalogScalingFactor - solarCurrentQuiescient);
  
 }
 
@@ -201,9 +207,10 @@ void runADCFilters(){
   long SolarCurrentSum = 0;
   long BatteryCurrentSum = 0;
   long ReferenceVoltageSum = 0;
+  long AmbientTempSum = 0;
   
   //Shift all values by 1
-  for (x = 0; x < (FILTER_ORDER-1); x++){
+  for (x = (FILTER_ORDER-1); x == 0; x--){
     ModuleTempArray[0][x+1] = ModuleTempArray[0][x];
     ModuleTempArray[1][x+1] = ModuleTempArray[1][x];
     ModuleTempArray[2][x+1] = ModuleTempArray[2][x];
@@ -217,6 +224,7 @@ void runADCFilters(){
     BatteryCurrentArray[x+1] = BatteryCurrentArray[x];
     
     ReferenceVoltageArray[x+1] = ReferenceVoltageArray[x];
+    AmbientTempArray[x+1] = AmbientTempArray[x];
   }
 
   //Replace the beginning of the array with the current value
@@ -233,6 +241,7 @@ void runADCFilters(){
   BatteryCurrentArray[0] = BatteryCurrentRaw;
   
   ReferenceVoltageArray[0] = ReferenceVoltageRaw;
+  AmbientTempArray[0] = AmbientTempRaw;
 
   //Performs addition
   for (x = 0; x < (FILTER_ORDER); x++){
@@ -249,6 +258,7 @@ void runADCFilters(){
     BatteryCurrentSum = BatteryCurrentSum + BatteryCurrentArray[x];
     
     ReferenceVoltageSum = ReferenceVoltageSum + ReferenceVoltageArray[x];
+    AmbientTempSum = AmbientTempSum + AmbientTempArray[x];
   }
 
   //Performs averaging
@@ -265,6 +275,7 @@ void runADCFilters(){
   BatteryCurrentFiltered = (int)(BatteryCurrentSum / FILTER_ORDER);
   
   ReferenceVoltageFiltered = (int)(ReferenceVoltageSum / FILTER_ORDER);
+  AmbientTempFiltered = (int)(AmbientTempSum / FILTER_ORDER);
 }
 //===================FUNCTIONS: BMS checks======================
 
