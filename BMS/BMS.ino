@@ -8,9 +8,9 @@
 
 //Module voltage scalers
 #define V1_SCALE 1
-#define V2_SCALE 1.62         // = 1/(100k/(100k+62k))  and then precision calibrated with DMM and voltrage source
-#define V3_SCALE 2.422925086  // = 1/(100k/(100k+140k)) and then precision calibrated with DMM and voltrage source
-#define V4_SCALE 3.159857568  // = 1/(100k/(100k+220k)) and then precision calibrated with DMM and voltrage source
+#define V2_SCALE 1.61         // = 1/(100k/(100k+62k))  and then precision calibrated with DMM and voltrage source
+#define V3_SCALE 2.36         // = 1/(100k/(100k+140k)) and then precision calibrated with DMM and voltrage source
+#define V4_SCALE 3.075          // = 1/(100k/(100k+220k)) and then precision calibrated with DMM and voltrage source
 
 //Thermistor constants
 #define B 3950
