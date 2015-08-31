@@ -21,9 +21,9 @@
 #define Rmax 25580 //Min temp is actually -20C, which is 98880 ohms. We're using 25580 ohms, which is around 5C
 
 //Cell voltage limits
-#define Vmin 2.8      //Actual limit is 2.8V
-#define Vmax 3.6    //Actual limit is 3.6V
-#define VChargeComplete 13.8  //3.45V per cell
+#define Vmin 2.85      //Actual limit is 2.8V
+#define Vmax 3.55    //Actual limit is 3.6V
+#define VChargeComplete 14.1  //3.525V per cell
 #define VCanChargeAgain 13.2  //3.3V per cell
 
 //Cell current limits
@@ -118,7 +118,7 @@ int numberOfIterations = 0;
 
 //Quiescient current sensor calibrations
 float battCurrentQuiescient = 2.5;
-float solarCurrentQuiescient = 0.5;
+float solarCurrentQuiescient = 0.3;
 
 //LCD
 Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();
@@ -281,13 +281,18 @@ void runADCFilters(){
 
 bool isVoltBad(){
   bool badVoltage = false;
-  for (int x = 0; x < 4; x++){
+  /*for (int x = 0; x < 4; x++){
     if ((ModuleVoltage[x] > Vmax) || (ModuleVoltage[x] < Vmin)){
       Serial.println(x);
       Serial.println(ModuleVoltage[x]);
       badVoltage = true;
     }
+  }*/
+  if ((PackVoltage > (Vmax*4)) || (PackVoltage < (Vmin*4))){
+      Serial.println(PackVoltage);
+      badVoltage = true;
   }
+  
   return badVoltage;
 }
 
@@ -340,6 +345,15 @@ bool isPackBricked(){
 bool isLowSOC(){
 }
 
+float getArrayPower(){
+  return (PackVoltage * ArrayCurrent);
+}
+
+float getBatteryPower(){
+  return (PackVoltage * PackCurrent);
+}
+
+
 //===================FUNCTIONS: SOC calculation===================
 
 float getSOC(){
@@ -372,11 +386,29 @@ bool isArrayContactorClosed(){
 void DisplayPage(int PageNumber){
 }
 
+void DisplayLCD(){
+  //Clears the LCD
+  lcd.clear();
+  
+  //Sets LCD cursor to top left
+  lcd.setCursor(0, 0);
+  
+  //Print array power
+  lcd.print("ARR:");
+  
+  //Print pack power
+  lcd.print(round(getArrayPower()));
+  
+  //sets LCD cursor at bottom left
+  lcd.setCursor(0, 1);
+  lcd.print("BATT: ");
+  lcd.print(round(getBatteryPower()));
+}
 void InitLCD (){
   //Set up the LCD's number of columns and rows: 
   lcd.begin(16, 2);
   
-  //Sets the LCD's backlight to green
+  //Sets the LCD's backlight to blue
   lcd.setBacklight(WHITE);
 }
 
@@ -463,11 +495,14 @@ ISR(TIMER1_COMPA_vect){
         ArrayContactor(true);
       }
     }
+    
+   
   }
   else{
     //Iterate iternations
     numberOfIterations++;
   }
+  
 
   //DEBUG
   Serial.print("V1: ");
@@ -481,6 +516,9 @@ ISR(TIMER1_COMPA_vect){
   
   Serial.print(" V4: ");
   Serial.print(ModuleVoltage[3],4);
+  
+  Serial.print(" PackV: ");
+  Serial.print(PackVoltage,4);
 
   Serial.print(" T1: ");
   Serial.print(ModuleTempR[0]);
@@ -491,13 +529,10 @@ ISR(TIMER1_COMPA_vect){
   Serial.print(" T3: ");
   Serial.print(ModuleTempR[2]);
   
-  Serial.print(" B: ");
+  Serial.print(" PC: ");
   Serial.print(PackCurrent);
 
-  Serial.print(" BR: ");
-  Serial.print(PackCurrent);
-
-  Serial.print(" S: ");
+  Serial.print(" AC ");
   Serial.println(ArrayCurrent);
 }
 
@@ -531,13 +566,104 @@ void setup() {
 
   //Initializes and enables Timer1, which will run
   //all our code at 10Hz
-  initTimer();  
+  //initTimer();  
 }
 
 //==================MAIN LOOP=======================
 //This function runs forever, and after setup()
 //==================================================
 void loop() {
+  //Outputs data on LCD
+  //DisplayLCD();
   // We really don't want to use this function due 
   // to poor timing - no code here
+  
+  
+  //Reads values from the ADCs
+  readADCs();
+
+  //Runs filters to filter data from ADCs
+  runADCFilters();
+
+  //Caculate analog values
+  CalculateAnalogValues();
+
+  //Checks for initial startup
+  if (numberOfIterations > (FILTER_ORDER*2)){
+    //Checks for bad voltage
+    if (isVoltBad() == true){
+      Serial.println("Bad Voltage!!!!");
+      MainContactor(false);
+    }
+  
+    //Checks for bad current
+    if (isCurrentBad() == true){
+      Serial.println("Bad Current!!!!");
+      MainContactor(false);
+    }
+  
+    //Checks for bad temperature
+    if (isTempBad() == true){
+      Serial.println("Bad Temperature!!!!");
+      MainContactor(false);
+    }
+  
+    //Checks for charge complete
+    if (ChargeComplete == false){
+      if (isChargeComplete()){
+        ChargeComplete = true;
+        ArrayContactor(false);
+      }
+    }
+    else{
+      if (canChargeAgain){
+        ChargeComplete = false;
+        ArrayContactor(true);
+      }
+    }
+    
+   
+  }
+  else{
+    //Iterate iternations
+    numberOfIterations++;
+  }
+  
+
+  //DEBUG
+  Serial.print("V1: ");
+  Serial.print(ModuleVoltage[0],4);
+  
+  Serial.print(" V2: ");
+  Serial.print(ModuleVoltage[1],4);
+  
+  Serial.print(" V3: ");
+  Serial.print(ModuleVoltage[2],4);
+  
+  Serial.print(" V4: ");
+  Serial.print(ModuleVoltage[3],4);
+  
+  Serial.print(" PackV: ");
+  Serial.print(PackVoltage,4);
+
+  Serial.print(" T1: ");
+  Serial.print(ModuleTempR[0]);
+  
+  Serial.print(" T2: ");
+  Serial.print(ModuleTempR[1]);
+  
+  Serial.print(" T3: ");
+  Serial.print(ModuleTempR[2]);
+  
+  Serial.print(" PC: ");
+  Serial.print(PackCurrent);
+
+  Serial.print(" AC ");
+  Serial.println(ArrayCurrent);
+  
+  //Displays the LCD
+  DisplayLCD();
+  
+  //Delay ms
+  delay(100);
 }
