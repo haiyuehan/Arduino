@@ -471,16 +471,16 @@ ISR(TIMER1_COMPA_vect){
 
   //DEBUG
   Serial.print("V1: ");
-  Serial.print(ModuleVoltage[0]);
+  Serial.print(ModuleVoltage[0],4);
   
   Serial.print(" V2: ");
-  Serial.print(ModuleVoltage[1]);
+  Serial.print(ModuleVoltage[1],4);
   
   Serial.print(" V3: ");
-  Serial.print(ModuleVoltage[2]);
+  Serial.print(ModuleVoltage[2],4);
   
   Serial.print(" V4: ");
-  Serial.print(ModuleVoltage[3]);
+  Serial.print(ModuleVoltage[3],4);
 
   Serial.print(" T1: ");
   Serial.print(ModuleTempR[0]);
